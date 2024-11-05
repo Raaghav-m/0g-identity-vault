@@ -1,0 +1,38 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "contracts/DIdentity.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity 0.8.7;\nimport {Issuer} from \"./Issuer.sol\";\n\nerror NotOwner(address requester);\nerror NotIssuer(address requester);\n\ncontract DIdentity {\n    address public owner;\n\n    enum Roles {\n        Viewer,\n        Issuer\n    }\n    mapping(address => Roles) public roles;\n    mapping(address => string) private rootHash;\n    mapping(address => Issuer) private issuers;\n\n    event UpdatedInformationEvent(address requester, string rH);\n    event RequestSubmitted(address requester, address approver);\n\n    modifier onlyOwner() {\n        if (msg.sender != owner) revert NotOwner(msg.sender);\n        _;\n    }\n\n    modifier onlyIssuer() {\n        if (roles[msg.sender] != Roles.Issuer) revert NotIssuer(msg.sender);\n        _;\n    }\n\n    constructor() {\n        owner = msg.sender;\n    }\n\n    function assignIssuer(address _requester) public onlyOwner {\n        require(_requester != address(0), \"Invalid address\");\n        if (address(issuers[_requester]) == address(0)) {\n            issuers[_requester] = new Issuer(_requester);\n        }\n        roles[_requester] = Roles.Issuer;\n    }\n\n    function updateDetails(\n        address _requester,\n        address _approver,\n        bytes32 _property,\n        bytes32 _val\n    ) public onlyIssuer {\n        issuers[_approver].addRequest(_requester, _property, _val);\n        emit RequestSubmitted(_requester, _approver);\n    }\n\n    function updateRootHash(\n        address _requester,\n        string memory _rootHash\n    ) public onlyIssuer {\n        rootHash[_requester] = _rootHash;\n        emit UpdatedInformationEvent(_requester, _rootHash);\n    }\n    function getRootHash() public view returns (string memory) {\n        return rootHash[msg.sender];\n    }\n    function getRole(address _address) public view returns (Roles) {\n    return roles[_address];\n}\n\n}\n"
+    },
+    "contracts/Issuer.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity 0.8.7;\n\ncontract Issuer {\n    address private issuer;\n\n    struct Details {\n        address requester;\n        bytes32 property;\n        bytes32 val;\n    }\n\n    Details[] private historyOfRequests;\n    uint private startIndex; // Tracks the first element for FIFO.\n\n    event UpdateApproved(address requester);\n\n    constructor(address _issuer) {\n        require(_issuer != address(0), \"Invalid issuer address\");\n        issuer = _issuer;\n    }\n\n    function addRequest(\n        address _requester,\n        bytes32 _property,\n        bytes32 _val\n    ) external {\n        Details memory newRequest = Details({\n            requester: _requester,\n            property: _property,\n            val: _val\n        });\n        historyOfRequests.push(newRequest);\n    }\n\n    function approveRequest() external returns (bool) {\n        require(\n            historyOfRequests.length > startIndex,\n            \"No requests to approve\"\n        );\n\n        emit UpdateApproved(historyOfRequests[startIndex].requester);\n\n        startIndex++; // Move the start index forward to remove the first request.\n\n        return true;\n    }\n    function declineRequest() external returns (bool) {\n        startIndex++;\n        return false;\n    }\n\n    function getRequestHistory() external view returns (Details[] memory) {\n        uint size = historyOfRequests.length - startIndex;\n        Details[] memory activeRequests = new Details[](size);\n\n        for (uint i = 0; i < size; i++) {\n            activeRequests[i] = historyOfRequests[startIndex + i];\n        }\n        return activeRequests;\n    }\n}\n"
+    }
+  },
+  "settings": {
+    "optimizer": {
+      "enabled": false,
+      "runs": 200
+    },
+    "outputSelection": {
+      "*": {
+        "*": [
+          "abi",
+          "evm.bytecode",
+          "evm.deployedBytecode",
+          "evm.methodIdentifiers",
+          "metadata",
+          "devdoc",
+          "userdoc",
+          "storageLayout",
+          "evm.gasEstimates"
+        ],
+        "": [
+          "ast"
+        ]
+      }
+    },
+    "metadata": {
+      "useLiteralContent": true
+    }
+  }
+}
